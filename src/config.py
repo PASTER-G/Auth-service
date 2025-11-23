@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Не пойдет для прода
+
 # Database
 POSTGRES_DB = os.getenv("POSTGRES_DB", "auth_db")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "admin")

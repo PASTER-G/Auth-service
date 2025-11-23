@@ -76,12 +76,12 @@ async def login(request: LoginRequest):
     
     token = str(uuid.uuid4())
     
-    # Store session in Redis with TTL from config
+    # Храним сессии в Redis с TTL из конфига
     session_ttl_seconds = SESSION_TTL_HOURS * 3600
     redis_client.setex(f"session:{token}", session_ttl_seconds, request.username)
     redis_client.setex(f"user:{request.username}", session_ttl_seconds, token)
     
-    # Send to Kafka
+    # Отправляем в Кафку
     produce_session_event("login", request.username, token)
     
     return {"token": token}
