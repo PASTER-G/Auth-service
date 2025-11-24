@@ -17,6 +17,16 @@
 ├── docker-compose.yml # Конфигурация Docker сервисов
 ├── Dockerfile # Docker образ приложения
 ├── requirements.txt # Зависимости Python
+├── monitoring/ # Данные для мониторинга
+│ ├── prometheus.yml # Конфигурация для Prometheus
+│ └── grafana/ # Конфигурация для Grafana
+│     ├── dashboards/ # Дашборды
+│     │ └── api-dashboard.json
+│     └── provisioning/ # Данные для Grafana
+│         ├── dashboards/
+│         │ └── dashboard.yml
+│         └── datasources/
+│           └── datasource.yml
 ├── src/ # Исходный код приложения
 │ ├── app.py # Основное FastAPI приложение
 │ ├── auth.py # Логика аутентификации
