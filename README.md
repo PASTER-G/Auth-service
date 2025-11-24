@@ -55,6 +55,8 @@ docker-compose up -d
 - **Kafka UI**: http://localhost:8080
 - **PostgreSQL**: http://localhost:5432
 - **Redis**: http://localhost:6379
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000 *(admin/admin)*
 
 ## API Эндпоинты
 
@@ -63,6 +65,19 @@ docker-compose up -d
 - *GET /verify* - Проверка токена
 - *POST /logout* - Выход из системы
 - *GET /health* - Проверка здоровья сервисов
+
+## Мониторинг
+
+Проект включает в себя мониторинг через Prometheus и Grafana:
+
+- **Prometheus** собирает метрики с API на эндпоинте `/metrics`
+- **Grafana** визуализирует метрики с готовым дашбордом
+
+Доступные метрики:
+- Количество HTTP запросов
+- Время выполнения запросов  
+- Количество активных сессий
+- Количество активных пользователей
 
 ## Пример использования
 ```bash

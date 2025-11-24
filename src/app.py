@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import Response
 from confluent_kafka import Producer
 import redis
 import uuid
@@ -7,10 +8,36 @@ import json
 import time
 import logging
 
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter, Histogram, Gauge
 from src.auth import create_user, verify_user, create_tables
 from src.kafka_producer import produce_session_event
 from src.config import REDIS_HOST, REDIS_PORT, SESSION_TTL_HOURS, KAFKA_BOOTSTRAP_SERVERS
 from src.database import wait_for_db, get_db_connection
+
+logging.config.dictConfig({
+    'version': 1,
+    'disable_existing_loggers': False,
+    'loggers': {
+        'uvicorn': {
+            'handlers': [],
+            'propagate': False,
+        },
+        'uvicorn.access': {
+            'handlers': [],
+            'propagate': False,
+        },
+        'uvicorn.error': {
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+})
+
+# Prometheus метрики
+REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP Requests', ['method', 'endpoint', 'status_code'])
+REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP request latency', ['method', 'endpoint'])
+ACTIVE_SESSIONS = Gauge('active_sessions', 'Number of active sessions')
+ACTIVE_USERS = Gauge('active_users', 'Number of active users')
 
 app = FastAPI()
 security = HTTPBearer()
@@ -19,7 +46,16 @@ security = HTTPBearer()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Redis connection
+# Создаем фильтр для исключения /metrics из логов
+class MetricsFilter(logging.Filter):
+    def filter(self, record):
+        return "/metrics" not in record.getMessage()
+
+# Применяем фильтр к логгеру uvicorn
+for handler in logging.getLogger("uvicorn.access").handlers:
+    handler.addFilter(MetricsFilter())
+
+# Redis соединение
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 from pydantic import BaseModel
@@ -31,6 +67,27 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str
     password: str
+
+# Middleware для сбора метрик
+@app.middleware("http")
+async def monitor_requests(request: Request, call_next):
+    start_time = time.time()
+
+    # Пропускаем логирование для /metrics
+    if request.url.path == "/metrics":
+        response = await call_next(request)
+        return response
+
+    response = await call_next(request)
+    
+    # Собираем метрики
+    process_time = time.time() - start_time
+    REQUEST_LATENCY.labels(method=request.method, endpoint=request.url.path).observe(process_time)
+    REQUEST_COUNT.labels(method=request.method, endpoint=request.url.path, status_code=response.status_code).inc()
+    
+    logger.info(f"{request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s")
+
+    return response
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
@@ -60,6 +117,20 @@ async def startup_event():
         logger.info("Test user already exists or couldn't be created")
     
     logger.info("Application initialization completed!")
+
+@app.get("/metrics")
+async def metrics():
+    """Эндпоинт для Prometheus метрик"""
+    # Обновляем метрики активных сессий и пользователей
+    try:
+        session_keys = redis_client.keys("session:*")
+        user_keys = redis_client.keys("user:*")
+        ACTIVE_SESSIONS.set(len(session_keys))
+        ACTIVE_USERS.set(len(user_keys))
+    except Exception as e:
+        logger.error(f"Error updating metrics: {e}")
+    
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 @app.post("/register")
 async def register(request: RegisterRequest):
@@ -114,8 +185,7 @@ async def health():
             cur.execute("SELECT 1")
         
         # Проверяем соединение с Kafka
-        from confluent_kafka import Producer
-        from src.config import KAFKA_BOOTSTRAP_SERVERS
+
         
         kafka_producer = Producer({
             'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,

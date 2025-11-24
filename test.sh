@@ -11,13 +11,13 @@ echo -e "\n"
 echo "2. Регистрация пользователя..."
 curl -X POST "$API_URL/register" \
   -H "Content-Type: application/json" \
-  -d '{"username":"testuser123", "password":"testpass"}'
+  -d '{"username":"testuser1112", "password":"testpass"}'
 echo -e "\n"
 
 echo "3. Логин пользователя..."
 LOGIN_RESPONSE=$(curl -s -X POST "$API_URL/login" \
   -H "Content-Type: application/json" \
-  -d '{"username":"testuser123", "password":"testpass"}')
+  -d '{"username":"testuser1112", "password":"testpass"}')
 echo "$LOGIN_RESPONSE"
 
 TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"token":"[^"]*' | cut -d'"' -f4)
